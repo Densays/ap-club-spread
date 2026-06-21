@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>AP CLUB — Spread Game</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+html,body,#root{width:100%;height:100%;overflow:hidden}
+body{background:#08090d;font-family:'Inter',system-ui,-apple-system,sans-serif}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script>
+const{useState,useEffect,useRef,useCallback}=React;
+
+const LINK="https://t.me/+ivOR1hysg2QyZDky";
+const GOAL=5,PEAK_ZONE=0.7,ZERO_ZONE=0.35,W=360,H=260;
+const C={bg:"#08090d",card:"#0e1018",accent:"#c9a84c",accentDim:"#7a6530",green:"#34d399",red:"#ef4444",blue:"#3b82f6",text:"#e8e6e1",muted:"#4a4940",border:"#1a1c24"};
+
+function createNoise(){
+  const oc=[{f:0.012,a:1},{f:0.03,a:0.5},{f:0.07,a:0.25},{f:0.15,a:0.1}];
+  const h=n=>{let x=Math.sin(n*127.1)*43758.5453;return x-Math.floor(x)};
+  const sm=t=>t*t*(3-2*t);
+  const n1=x=>{const i=Math.floor(x);return(h(i)+(h(i+1)-h(i))*sm(x-i))*2-1};
+  return t=>{let v=0;for(const o of oc)v+=n1(t*o.f)*o.a;return v*1.3};
+}
+
+function App(){
+  const[mode,setMode]=useState("menu");
+  const[score,setScore]=useState(0);
+  const[phase,setPhase]=useState("peak");
+  const[flash,setFlash]=useState(null);
+  const[pct,setPct]=useState(0);
+  const canvasRef=useRef(null);
+  const animRef=useRef(null);
+  const st=useRef({t:0,val:0,noise:null});
+  const phRef=useRef("peak");
+
+  const gs=useCallback(t=>{
+    if(!st.current.noise)st.current.noise=createNoise();
+    return st.current.noise(t);
+  },[]);
+
+  const draw=useCallback(()=>{
+    const cv=canvasRef.current;if(!cv)return;
+    const ctx=cv.getContext("2d");
+    const d=window.devicePixelRatio||1;
+    cv.width=W*d;cv.height=H*d;ctx.scale(d,d);
+    st.current.t+=0.9;
+    const cur=gs(st.current.t);
+    st.current.val=cur;setPct(cur);
+    const my=H*0.45,sc=65,ph=phRef.current;
+
+    ctx.fillStyle=C.card;ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle="#1a1c24";ctx.lineWidth=0.5;
+    for(let p=-3;p<=3;p++){
+      const y=my-p*sc*0.5;if(y<5||y>H-5)continue;
+      ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();
+      ctx.fillStyle=C.muted;ctx.font="9px monospace";ctx.textAlign="left";
+      ctx.fillText((p*0.5).toFixed(1)+"%",4,y-3);
+    }
+    ctx.strokeStyle=C.accentDim;ctx.lineWidth=0.8;
+    ctx.beginPath();ctx.moveTo(0,my);ctx.lineTo(W,my);ctx.stroke();
+
+    if(ph==="peak"){
+      ctx.fillStyle="rgba(201,168,76,0.04)";
+      ctx.fillRect(0,0,W,my-PEAK_ZONE*sc);
+      ctx.fillRect(0,my+PEAK_ZONE*sc,W,H);
+      ctx.strokeStyle="rgba(201,168,76,0.2)";ctx.lineWidth=1;ctx.setLineDash([4,4]);
+      ctx.beginPath();ctx.moveTo(0,my-PEAK_ZONE*sc);ctx.lineTo(W,my-PEAK_ZONE*sc);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(0,my+PEAK_ZONE*sc);ctx.lineTo(W,my+PEAK_ZONE*sc);ctx.stroke();
+      ctx.setLineDash([]);
+    }else{
+      ctx.fillStyle="rgba(52,211,153,0.05)";
+      ctx.fillRect(0,my-ZERO_ZONE*sc,W,ZERO_ZONE*sc*2);
+      ctx.strokeStyle="rgba(52,211,153,0.2)";ctx.lineWidth=1;ctx.setLineDash([4,4]);
+      ctx.beginPath();ctx.moveTo(0,my-ZERO_ZONE*sc);ctx.lineTo(W,my-ZERO_ZONE*sc);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(0,my+ZERO_ZONE*sc);ctx.lineTo(W,my+ZERO_ZONE*sc);ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    const pts=[];
+    for(let i=0;i<200;i++){
+      const t=st.current.t-(200-i)*0.7;
+      const v=gs(t);
+      pts.push({x:(i/200)*W,y:my-v*sc,v});
+    }
+
+    ctx.beginPath();
+    pts.forEach((p,i)=>{if(!i)ctx.moveTo(p.x,my);ctx.lineTo(p.x,Math.min(p.y,my))});
+    ctx.lineTo(pts[pts.length-1].x,my);ctx.closePath();
+    ctx.fillStyle="rgba(52,211,153,0.10)";ctx.fill();
+
+    ctx.beginPath();
+    pts.forEach((p,i)=>{if(!i)ctx.moveTo(p.x,my);ctx.lineTo(p.x,Math.max(p.y,my))});
+    ctx.lineTo(pts[pts.length-1].x,my);ctx.closePath();
+    ctx.fillStyle="rgba(239,68,68,0.07)";ctx.fill();
+
+    ctx.beginPath();ctx.strokeStyle=C.blue;ctx.lineWidth=2;
+    ctx.lineJoin="round";ctx.lineCap="round";
+    pts.forEach((p,i)=>(!i?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)));ctx.stroke();
+
+    const g=ctx.createLinearGradient(W-50,0,W,0);
+    g.addColorStop(0,"rgba(59,130,246,0)");g.addColorStop(1,"rgba(59,130,246,0.35)");
+    ctx.beginPath();ctx.strokeStyle=g;ctx.lineWidth=6;
+    pts.slice(-25).forEach((p,i)=>(!i?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)));ctx.stroke();
+
+    const l=pts[pts.length-1];
+    ctx.beginPath();ctx.arc(l.x,l.y,5,0,Math.PI*2);ctx.fillStyle="rgba(59,130,246,0.25)";ctx.fill();
+    ctx.beginPath();ctx.arc(l.x,l.y,3.5,0,Math.PI*2);ctx.fillStyle=C.blue;ctx.fill();
+    ctx.beginPath();ctx.arc(l.x,l.y,1.5,0,Math.PI*2);ctx.fillStyle="#fff";ctx.fill();
+
+    const ip=Math.abs(cur)>=PEAK_ZONE,iz=Math.abs(cur)<ZERO_ZONE;
+    let lb=cur>0?"#1e40af":"#991b1b";
+    if(ph==="peak"&&ip)lb="#92400e";
+    else if(ph==="zero"&&iz)lb="#065f46";
+    const lt=(cur>0?"+":"")+cur.toFixed(2)+"%";
+    ctx.font="bold 10px monospace";
+    const tw=ctx.measureText(lt).width+10;
+    const lx=Math.min(l.x,W-tw/2-4);
+    const ab=l.y>35,ly=ab?l.y-16:l.y+18;
+    ctx.fillStyle=lb;
+    ctx.beginPath();ctx.roundRect(lx-tw/2,ly-7,tw,16,3);ctx.fill();
+    ctx.beginPath();
+    if(ab){ctx.moveTo(lx-3,ly+9);ctx.lineTo(lx+3,ly+9);ctx.lineTo(lx,ly+13)}
+    else{ctx.moveTo(lx-3,ly-7);ctx.lineTo(lx+3,ly-7);ctx.lineTo(lx,ly-11)}
+    ctx.fill();
+    ctx.fillStyle="#fff";ctx.textAlign="center";ctx.fillText(lt,lx,ly+4);
+
+    animRef.current=requestAnimationFrame(draw);
+  },[gs]);
+
+  useEffect(()=>{
+    if(mode!=="game")return;
+    st.current={t:0,val:0,noise:createNoise()};
+    animRef.current=requestAnimationFrame(draw);
+    return()=>cancelAnimationFrame(animRef.current);
+  },[mode,draw]);
+
+  const tap=()=>{
+    if(mode!=="game")return;
+    const v=st.current.val;
+    if(phRef.current==="peak"){
+      if(Math.abs(v)>=PEAK_ZONE){setPhase("zero");phRef.current="zero";setFlash("step1")}
+      else setFlash("miss");
+    }else{
+      if(Math.abs(v)<ZERO_ZONE){
+        const n=score+1;setScore(n);
+        setPhase("peak");phRef.current="peak";setFlash("hit");
+        if(n>=GOAL)setTimeout(()=>setMode("win"),400);
+      }else setFlash("miss");
+    }
+    setTimeout(()=>setFlash(null),400);
+  };
+
+  const play=()=>{setScore(0);setFlash(null);setPhase("peak");phRef.current="peak";setMode("game")};
+
+  const ip=Math.abs(pct)>=PEAK_ZONE,iz=Math.abs(pct)<ZERO_ZONE;
+
+  if(mode==="menu")return React.createElement("div",{style:S.wrap},
+    React.createElement("div",{style:S.logoBox},
+      React.createElement("span",{style:S.logoAP},"AP"),
+      React.createElement("span",{style:S.logoCLUB},"CLUB")
+    ),
+    React.createElement("div",{style:S.tag},"SPREAD GAME"),
+    React.createElement("div",{style:S.divider}),
+    React.createElement("div",{style:S.rule},"① Тапни когда спред на пике"),
+    React.createElement("div",{style:S.rule},"② Тапни когда вернётся к нулю"),
+    React.createElement("div",{style:{...S.rule,color:C.accent,marginTop:6}},"Поймай "+GOAL+" раз — и ты в деле"),
+    React.createElement("button",{style:S.go,onClick:play},"НАЧАТЬ")
+  );
+
+  if(mode==="win")return React.createElement("div",{style:S.wrap},
+    React.createElement("div",{style:{fontSize:48}},"🏆"),
+    React.createElement("div",{style:S.logoBox},
+      React.createElement("span",{style:S.logoAP},"AP"),
+      React.createElement("span",{style:S.logoCLUB},"CLUB")
+    ),
+    React.createElement("div",{style:{...S.tag,color:C.green}},"СПРЕД ПОЙМАН!"),
+    React.createElement("div",{style:{color:C.muted,fontSize:13}},GOAL+"/"+GOAL+" попаданий"),
+    React.createElement("a",{href:LINK,target:"_blank",rel:"noopener noreferrer",style:S.tg},"Вэлкам в нашу банду! 🚀"),
+    React.createElement("button",{style:S.re,onClick:play},"Ещё раз")
+  );
+
+  return React.createElement("div",{style:{...S.wrap,background:flash==="hit"?"#0a1a0e":flash==="step1"?"#16130a":flash==="miss"?"#1a0a0a":C.bg},onClick:tap},
+    React.createElement("div",{style:S.hdr},
+      React.createElement("div",{style:S.logoSm},
+        React.createElement("span",{style:{color:C.accent}},"AP")," CLUB"
+      ),
+      React.createElement("div",{style:S.badge},score+"/"+GOAL)
+    ),
+    React.createElement("div",{style:S.dots},
+      Array.from({length:GOAL}).map((_,i)=>
+        React.createElement("div",{key:i,style:{
+          width:16,height:16,borderRadius:"50%",
+          border:"2px solid "+(i<score?C.accent:C.border),
+          background:i<score?C.accent:"transparent",
+          boxShadow:i<score?"0 0 8px "+C.accent+"44":"none",
+          transition:"all .25s",
+        }})
+      )
+    ),
+    React.createElement("div",{style:{
+      ...S.ph,
+      borderColor:phase==="peak"?(ip?C.accent:C.border):(iz?C.green:C.border),
+      color:phase==="peak"?(ip?C.accent:C.accentDim):(iz?C.green:"#2a5a45"),
+    }},phase==="peak"?(ip?"▼ ТАПАЙ НА ПИКЕ! ▼":"① Жди пик спреда..."):(iz?"▼ ТАПАЙ У НУЛЯ! ▼":"② Жди возврат к 0%...")),
+    React.createElement("canvas",{ref:canvasRef,style:{width:W,height:H,borderRadius:10,border:"1px solid "+C.border}}),
+    flash==="hit"?React.createElement("div",{style:S.fh},"+1 💰"):
+    flash==="step1"?React.createElement("div",{style:S.fs},"Пик пойман! Жди ноль..."):
+    flash==="miss"?React.createElement("div",{style:S.fm},"Мимо!"):
+    React.createElement("div",{style:{height:22}})
+  );
+}
+
+const S={
+  wrap:{width:"100%",height:"100vh",background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:10,fontFamily:"'Inter',system-ui,sans-serif",cursor:"pointer",transition:"background .15s",overflow:"hidden"},
+  logoBox:{display:"flex",alignItems:"baseline",gap:6},
+  logoAP:{fontSize:44,fontWeight:900,color:C.accent,letterSpacing:2,lineHeight:1},
+  logoCLUB:{fontSize:44,fontWeight:300,color:C.text,letterSpacing:6,lineHeight:1},
+  tag:{fontSize:14,fontWeight:600,color:C.muted,letterSpacing:4,textTransform:"uppercase"},
+  divider:{width:50,height:2,background:C.accent,borderRadius:1,margin:"4px 0"},
+  rule:{color:C.muted,fontSize:13},
+  go:{marginTop:14,padding:"14px 50px",background:"linear-gradient(135deg,"+C.accent+",#a8882e)",border:"none",borderRadius:30,fontSize:15,fontWeight:700,letterSpacing:3,cursor:"pointer",color:"#000"},
+  hdr:{position:"absolute",top:16,left:0,right:0,display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 20px"},
+  logoSm:{fontSize:14,fontWeight:700,color:C.text,letterSpacing:2},
+  badge:{fontSize:13,fontWeight:700,color:C.accent,letterSpacing:2,padding:"4px 12px",border:"1px solid "+C.accentDim,borderRadius:20},
+  dots:{display:"flex",gap:12},
+  ph:{padding:"8px 18px",borderRadius:8,fontSize:13,fontWeight:700,letterSpacing:1,transition:"all .2s",border:"1px solid",background:"rgba(0,0,0,0.3)"},
+  fh:{color:C.green,fontSize:20,fontWeight:800,height:22},
+  fs:{color:C.accent,fontSize:13,fontWeight:700,height:22},
+  fm:{color:C.red,fontSize:13,fontWeight:700,height:22},
+  tg:{marginTop:10,padding:"14px 28px",background:"linear-gradient(135deg,"+C.accent+",#a8882e)",borderRadius:30,color:"#000",fontSize:15,fontWeight:700,textDecoration:"none",letterSpacing:1},
+  re:{padding:"10px 30px",background:"none",border:"1px solid "+C.border,borderRadius:30,color:C.muted,fontSize:13,cursor:"pointer"},
+};
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+</body>
+</html>
